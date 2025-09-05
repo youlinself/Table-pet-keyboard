@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Table Pet Keyboard</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            -webkit-app-region: drag; /* 支持拖动 */
+        }
+    </style>
+</head>
+<body>
+    <canvas id="dogCanvas" width="400" height="400"></canvas>
+    
+    <script>
+        const canvas = document.getElementById('dogCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 键盘配置 - QWERASDZXC布局
+        const keyboard = {
+            keys: [
+                ['Q','W','E','R'],
+                ['A','S','D','F'],
+                ['Z','X','C','V']
+            ],
+            x: 100,
+            y: 180,
+            keyWidth: 18,
+            keyHeight: 10,
+            keySpacing: 3,
+            rowSpacing: 8,
+            activeKeys: []
+        };
+        
+        // 小狗状态
+         const dog = {
+             x: 100,
+             y: 250, // 调整y坐标让狗狗在键盘上方
+             paws: [
+                 { x: 100, y: 270, isPressing: false, targetKey: null }, // 左爪
+                 { x: 100, y: 270, isPressing: false, targetKey: null }  // 右爪
+             ]
+         };
+         
+         // 按键队列
+         const keyQueue = [];
+         let activePaws = 0;
+        
+        // 绘制键盘
+        function drawKeyboard() {
+            const rows = keyboard.keys.length;
+            const keyWidth = keyboard.keyWidth;
+            const keyHeight = keyboard.keyHeight;
+            
+            // 绘制键盘板子
+            const totalWidth = 4 * keyWidth + 3 * keyboard.keySpacing;
+            const totalHeight = rows * keyHeight + (rows - 1) * keyboard.rowSpacing + 10;
+            ctx.fillStyle = '#444';
+            ctx.fillRect(keyboard.x - 5, keyboard.y - 5, totalWidth + 10, totalHeight + 10);
+            
+            for (let row = 0; row < rows; row++) {
+                const keysInRow = keyboard.keys[row].length;
+                const totalRowWidth = keysInRow * keyWidth + (keysInRow - 1) * keyboard.keySpacing;
+                const startX = keyboard.x + (keyWidth * 4 + keyboard.keySpacing * 3 - totalRowWidth) / 2;
+                const rowY = keyboard.y + row * (keyHeight + keyboard.rowSpacing);
+                
+                for (let col = 0; col < keysInRow; col++) {
+                    const keyX = startX + col * (keyWidth + keyboard.keySpacing);
+                    const key = keyboard.keys[row][col];
+                    
+                    // 按键背景（支持多个高亮按键）
+                    const isActive = keyboard.activeKeys && keyboard.activeKeys.includes(key);
+                    ctx.fillStyle = isActive ? '#ff6b6b' : '#666';
+                    ctx.fillRect(keyX, rowY, keyWidth, keyHeight);
+                    
+                    // 按键文字
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '7px Arial';
+                    ctx.fillText(key, keyX + keyWidth / 2, rowY + keyHeight / 2);
+                }
+            }
+        }
+        
+
+        
+        // 绘制小狗
+        function drawDog() {
+            // 清空画布
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 绘制键盘
+            drawKeyboard();
+            
+            // 绘制身体（椭圆形）- 背对我们
+            ctx.fillStyle = '#f4a460';
+            ctx.beginPath();
+            ctx.ellipse(dog.x, dog.y - 10, 35, 25, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制头部（圆形）- 背对我们
+            ctx.fillStyle = '#f4a460';
+            ctx.beginPath();
+            ctx.arc(dog.x, dog.y - 15, 20, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制耳朵- 背对我们
+            ctx.fillStyle = '#8b4513';
+            ctx.beginPath();
+            ctx.ellipse(dog.x - 12, dog.y - 25, 6, 8, -Math.PI / 6, 0, Math.PI * 2);
+            ctx.ellipse(dog.x + 12, dog.y - 25, 6, 8, Math.PI / 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制尾巴- 背对我们
+            ctx.strokeStyle = '#8b4513';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(dog.x, dog.y - 15);
+            ctx.quadraticCurveTo(dog.x + 25, dog.y - 40, dog.x + 15, dog.y - 35);
+            ctx.stroke();
+            
+            // 绘制左右爪子
+            dog.paws.forEach((paw, index) => {
+                ctx.fillStyle = '#f4a460';
+                ctx.beginPath();
+                if (paw.isPressing) {
+                    // 按下状态 - 爪子伸直
+                    ctx.ellipse(paw.x, paw.y, 8, 5, 0, 0, Math.PI * 2);
+                } else {
+                    // 抬起状态 - 爪子弯曲
+                    ctx.ellipse(paw.x, paw.y + 3, 8, 5, -Math.PI / 6, 0, Math.PI * 2);
+                }
+                ctx.fill();
+            });
+            
+            // 绘制尾巴
+            ctx.strokeStyle = '#8b4513';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(dog.x + 40, dog.y + 20);
+            ctx.quadraticCurveTo(dog.x + 60, dog.y, dog.x + 50, dog.y + 30);
+            ctx.stroke();
+        }
+        
+        // 模拟小狗按键盘
+         function pressKey(key) {
+             // 将按键加入队列
+             keyQueue.push(key);
+             
+             // 如果队列未在处理，开始处理
+             if (activePaws === 0) {
+                 processKeyQueue();
+             }
+         }
+         
+         // 处理按键队列
+         function processKeyQueue() {
+             // 最多同时处理2个按键（左右爪各一个）
+             while (keyQueue.length > 0 && activePaws < 2) {
+                 const key = keyQueue.shift();
+                 
+                 // 找到可用的爪子
+                 const availablePaw = dog.paws.findIndex(paw => !paw.isPressing);
+                 if (availablePaw === -1) break;
+                 
+                 dog.paws[availablePaw].isPressing = true;
+                 dog.paws[availablePaw].targetKey = key;
+                 keyboard.activeKeys = keyboard.activeKeys || [];
+                 keyboard.activeKeys.push(key);
+                 
+                 // 计算爪子位置（对应按键中心）
+                 let targetX = 0;
+                 let targetY = 0;
+                 
+                 for (let row = 0; row < keyboard.keys.length; row++) {
+                     const keyIndex = keyboard.keys[row].indexOf(key);
+                     if (keyIndex !== -1) {
+                         const keyWidth = keyboard.keyWidth;
+                         const keyHeight = keyboard.keyHeight;
+                         const keysInRow = keyboard.keys[row].length;
+                         const totalRowWidth = keysInRow * keyWidth + (keysInRow - 1) * keyboard.keySpacing;
+                         const startX = keyboard.x + (keyWidth * 4 + keyboard.keySpacing * 3 - totalRowWidth) / 2;
+                         targetX = startX + keyIndex * (keyWidth + keyboard.keySpacing) + keyWidth / 2;
+                         targetY = keyboard.y + row * (keyHeight + keyboard.rowSpacing) + keyHeight / 2;
+                         break;
+                     }
+                 }
+                 
+                 dog.paws[availablePaw].x = targetX;
+                 dog.paws[availablePaw].y = targetY;
+                 
+                 activePaws++;
+                 
+                 // 重绘
+                 drawDog();
+                 
+                 // 0.3秒后抬起爪子
+                 setTimeout(() => {
+                     dog.paws[availablePaw].isPressing = false;
+                     dog.paws[availablePaw].targetKey = null;
+                     keyboard.activeKeys = keyboard.activeKeys.filter(k => k !== key);
+                     activePaws--;
+                     drawDog();
+                     
+                     // 继续处理队列
+                     processKeyQueue();
+                 }, 300);
+             }
+         }
+         
+
+         
+         // 监听键盘事件
+         function setupKeyboardListener() {
+             window.addEventListener('keydown', (event) => {
+                 let key = event.key.toUpperCase();
+                 
+                 // 检查按键是否在键盘布局中（支持多行数组）
+                 let keyFound = false;
+                 for (let row of keyboard.keys) {
+                     if (row.includes(key)) {
+                         keyFound = true;
+                         break;
+                     }
+                 }
+                 
+                 if (keyFound) {
+                     pressKey(key);
+                 }
+             });
+         }
+         
+         // 初始绘制并设置监听
+         drawDog();
+         setupKeyboardListener();
+    </script>
+</body>
+</html>
